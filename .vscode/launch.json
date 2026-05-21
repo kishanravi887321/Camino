@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "name": "Launch Extension",
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "npm",
+      "request": "launch",
+      "type": "extensionHost"
+    },
+    {
+      "name": "Run Camino Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${command:extensionHost.command}",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
