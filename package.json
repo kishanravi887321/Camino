@@ -27,6 +27,6 @@
     "test": "echo \"No tests configured\""
   },
   "dependencies": {
-    "robotjs": "^0.6.0"
+    "nut-js": "^2.0.0"
   }
 }

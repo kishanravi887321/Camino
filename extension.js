@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const vscode = require('vscode');
-let robot = null; // lazy-loaded to avoid crashing activation if native module fails
+let nut = null; // lazy-loaded keyboard/mouse lib
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,13 +56,13 @@ function activate(context) {
     await openCopilotChat();
     await sleep(2000);
 
-    // Try to load robotjs only when the command runs. If it fails, show a warning
+    // Try to load @nut-tree/nut-js when the command runs. If it fails, show a warning
     // but continue so the extension doesn't crash on activation.
-    if (!robot) {
+    if (!nut) {
       try {
-        robot = require('robotjs');
+        nut = require('nut-js');
       } catch (err) {
-        vscode.window.showWarningMessage('robotjs failed to load: ' + err.message);
+        vscode.window.showWarningMessage('nut-js failed to load: ' + err.message);
       }
     }
 
@@ -72,9 +72,13 @@ function activate(context) {
       try {
         await copyFileToClipboard(imagePath);
         await sleep(500);
-        if (robot) {
-          robot.keyTap('v', ['control']);
-          await sleep(1000);
+        if (nut && nut.keyboard) {
+          try {
+            await nut.keyboard.type('v', { modifier: ['CONTROL'] });
+            await sleep(1000);
+          } catch (e) {
+            vscode.window.showInformationMessage('Image copied to clipboard; please paste manually into Copilot Chat.');
+          }
         } else {
           vscode.window.showInformationMessage('Image copied to clipboard; please paste manually into Copilot Chat.');
         }
@@ -85,11 +89,17 @@ function activate(context) {
 
     const prompt = 'Analyze this issue from the image and fix it.';
 
-    if (robot) {
-      robot.typeString(prompt);
-      robot.keyTap('enter');
+    if (nut && nut.keyboard) {
+      try {
+        await nut.keyboard.type(prompt + '\n');
+      } catch (err) {
+        try {
+          await vscode.commands.executeCommand('type', { text: prompt + '\n' });
+        } catch (err2) {
+          vscode.window.showInformationMessage('Could not auto-type prompt; please paste or type: ' + prompt);
+        }
+      }
     } else {
-      // Fallback: try the built-in type command to send the prompt to the focused input
       try {
         await vscode.commands.executeCommand('type', { text: prompt + '\n' });
       } catch (err) {
