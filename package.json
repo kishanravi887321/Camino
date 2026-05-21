@@ -26,7 +26,5 @@
     "lint": "echo \"No lint configured\"",
     "test": "echo \"No tests configured\""
   },
-  "dependencies": {
-    "nut-js": "^2.0.0"
-  }
+  "dependencies": {}
 }
