@@ -1,0 +1,32 @@
+{
+  "name": "camino-copilot-paste",
+  "displayName": "Camino Copilot Paste",
+  "description": "MVP command to open Copilot Chat and type a prompt.",
+  "version": "0.0.1",
+  "publisher": "kiras",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:testcopilot.start"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "testcopilot.start",
+        "title": "Test Copilot Paste"
+      }
+    ]
+  },
+  "scripts": {
+    "lint": "echo \"No lint configured\"",
+    "test": "echo \"No tests configured\""
+  },
+  "dependencies": {
+    "robotjs": "^0.6.0"
+  }
+}
