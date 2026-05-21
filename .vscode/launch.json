@@ -17,9 +17,10 @@
       "name": "Run Camino Extension",
       "type": "extensionHost",
       "request": "launch",
-      "runtimeExecutable": "${command:extensionHost.command}",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "cwd": "${workspaceFolder}"
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": []
     }
   ]
 }

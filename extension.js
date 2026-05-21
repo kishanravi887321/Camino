@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const vscode = require('vscode');
-const robot = require('robotjs');
+let robot = null; // lazy-loaded to avoid crashing activation if native module fails
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,21 +56,46 @@ function activate(context) {
     await openCopilotChat();
     await sleep(2000);
 
+    // Try to load robotjs only when the command runs. If it fails, show a warning
+    // but continue so the extension doesn't crash on activation.
+    if (!robot) {
+      try {
+        robot = require('robotjs');
+      } catch (err) {
+        vscode.window.showWarningMessage('robotjs failed to load: ' + err.message);
+      }
+    }
+
     const imagePath = path.join(__dirname, 'test.png');
 
     if (fs.existsSync(imagePath)) {
       try {
         await copyFileToClipboard(imagePath);
         await sleep(500);
-        robot.keyTap('v', ['control']);
-        await sleep(1000);
+        if (robot) {
+          robot.keyTap('v', ['control']);
+          await sleep(1000);
+        } else {
+          vscode.window.showInformationMessage('Image copied to clipboard; please paste manually into Copilot Chat.');
+        }
       } catch (error) {
         vscode.window.showWarningMessage(`Could not paste test.png: ${error.message}`);
       }
     }
 
-    robot.typeString('Analyze this issue from the image and fix it.');
-    robot.keyTap('enter');
+    const prompt = 'Analyze this issue from the image and fix it.';
+
+    if (robot) {
+      robot.typeString(prompt);
+      robot.keyTap('enter');
+    } else {
+      // Fallback: try the built-in type command to send the prompt to the focused input
+      try {
+        await vscode.commands.executeCommand('type', { text: prompt + '\n' });
+      } catch (err) {
+        vscode.window.showInformationMessage('Could not auto-type prompt; please paste or type: ' + prompt);
+      }
+    }
   });
 
   context.subscriptions.push(disposable);
