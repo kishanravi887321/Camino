@@ -26,30 +26,90 @@ async function openCopilotChat() {
 }
 
 function copyFileToClipboard(filePath) {
-  // Use PowerShell to set the clipboard image (bitmap) so webviews and chat
-  // inputs will accept Ctrl+V as an image paste. Uses System.Drawing + Forms.
-  const escapedPath = filePath.replace("'", "''");
-  const script = [
-    'Add-Type -AssemblyName System.Drawing',
-    'Add-Type -AssemblyName System.Windows.Forms',
-    `$img = [System.Drawing.Image]::FromFile('${escapedPath}')`,
-    '[System.Windows.Forms.Clipboard]::SetImage($img)'
-  ].join('; ');
+  const platform = process.platform;
 
-  return new Promise((resolve, reject) => {
-    execFile(
-      'powershell.exe',
-      ['-NoProfile', '-STA', '-Command', script],
-      (error, stdout, stderr) => {
+  if (platform === 'win32') {
+    const escapedPath = filePath.replace(/'/g, "''");
+    const script = [
+      'Add-Type -AssemblyName System.Drawing',
+      'Add-Type -AssemblyName System.Windows.Forms',
+      `$img = [System.Drawing.Image]::FromFile('${escapedPath}')`,
+      '[System.Windows.Forms.Clipboard]::SetImage($img)'
+    ].join('; ');
+
+    return new Promise((resolve, reject) => {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-STA', '-Command', script],
+        (error, stdout, stderr) => {
+          if (error) {
+            reject(new Error(error.message + '\n' + stderr));
+            return;
+          }
+
+          resolve();
+        }
+      );
+    });
+  }
+
+  if (platform === 'darwin') {
+    // Use AppleScript/osascript to read the file and set it as a TIFF picture on clipboard.
+    const script = `set the clipboard to (read (POSIX file "${filePath}") as TIFF picture)`;
+
+    return new Promise((resolve, reject) => {
+      execFile('osascript', ['-e', script], (error, stdout, stderr) => {
         if (error) {
           reject(new Error(error.message + '\n' + stderr));
           return;
         }
 
         resolve();
-      }
-    );
-  });
+      });
+    });
+  }
+
+  // Linux (try wl-copy then xclip)
+  if (platform === 'linux') {
+    return new Promise((resolve, reject) => {
+      // check for wl-copy
+      execFile('which', ['wl-copy'], (errWl) => {
+        if (!errWl) {
+          // use wl-copy
+          const cmd = `wl-copy --type image/png < '${filePath.replace(/'/g, "'\\''")}'`;
+          execFile('bash', ['-lc', cmd], (err, stdout, stderr) => {
+            if (err) {
+              reject(new Error(err.message + '\n' + stderr));
+              return;
+            }
+
+            resolve();
+          });
+          return;
+        }
+
+        // check for xclip
+        execFile('which', ['xclip'], (errX) => {
+          if (!errX) {
+            const cmd = `xclip -selection clipboard -t image/png -i '${filePath.replace(/'/g, "'\\''")}'`;
+            execFile('bash', ['-lc', cmd], (err2, stdout2, stderr2) => {
+              if (err2) {
+                reject(new Error(err2.message + '\n' + stderr2));
+                return;
+              }
+
+              resolve();
+            });
+            return;
+          }
+
+          reject(new Error('No clipboard image tool found: install wl-clipboard (wl-copy) or xclip')); 
+        });
+      });
+    });
+  }
+
+  return Promise.reject(new Error('Unsupported platform for image clipboard'));
 }
 
 function activate(context) {
