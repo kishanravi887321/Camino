@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const vscode = require('vscode');
-let nut = null; // lazy-loaded keyboard/mouse lib
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -27,21 +26,23 @@ async function openCopilotChat() {
 }
 
 function copyFileToClipboard(filePath) {
-  const escapedPath = filePath.replace(/'/g, "''");
+  // Use PowerShell to set the clipboard image (bitmap) so webviews and chat
+  // inputs will accept Ctrl+V as an image paste. Uses System.Drawing + Forms.
+  const escapedPath = filePath.replace("'", "''");
   const script = [
+    'Add-Type -AssemblyName System.Drawing',
     'Add-Type -AssemblyName System.Windows.Forms',
-    '$files = New-Object System.Collections.Specialized.StringCollection',
-    `$files.Add('${escapedPath}') | Out-Null`,
-    '[System.Windows.Forms.Clipboard]::SetFileDropList($files)'
+    `$img = [System.Drawing.Image]::FromFile('${escapedPath}')`,
+    '[System.Windows.Forms.Clipboard]::SetImage($img)'
   ].join('; ');
 
   return new Promise((resolve, reject) => {
     execFile(
       'powershell.exe',
       ['-NoProfile', '-STA', '-Command', script],
-      (error) => {
+      (error, stdout, stderr) => {
         if (error) {
-          reject(error);
+          reject(new Error(error.message + '\n' + stderr));
           return;
         }
 
@@ -56,15 +57,9 @@ function activate(context) {
     await openCopilotChat();
     await sleep(2000);
 
-    // Try to load @nut-tree/nut-js when the command runs. If it fails, show a warning
-    // but continue so the extension doesn't crash on activation.
-    if (!nut) {
-      try {
-        nut = require('nut-js');
-      } catch (err) {
-        vscode.window.showWarningMessage('nut-js failed to load: ' + err.message);
-      }
-    }
+    // We rely on copying the image to the clipboard and using VS Code's
+    // `type` command to send the prompt. No native automation library is
+    // required here to avoid native build issues.
 
     const imagePath = path.join(__dirname, 'test.png');
 
@@ -72,39 +67,41 @@ function activate(context) {
       try {
         await copyFileToClipboard(imagePath);
         await sleep(500);
-        if (nut && nut.keyboard) {
+
+        // Try to trigger a paste via VS Code commands. Some webviews accept
+        // the paste command; if it fails, ask the user to press Ctrl+V.
+        let pasted = false;
+        try {
+          // Try the editor paste action
+          await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+          pasted = true;
+        } catch (e) {
+          // ignore
+        }
+
+        if (!pasted) {
           try {
-            await nut.keyboard.type('v', { modifier: ['CONTROL'] });
-            await sleep(1000);
+            await vscode.commands.executeCommand('paste');
+            pasted = true;
           } catch (e) {
-            vscode.window.showInformationMessage('Image copied to clipboard; please paste manually into Copilot Chat.');
+            // ignore
           }
-        } else {
-          vscode.window.showInformationMessage('Image copied to clipboard; please paste manually into Copilot Chat.');
+        }
+
+        if (!pasted) {
+          vscode.window.showInformationMessage('Image copied to clipboard; please paste manually into Copilot Chat (Ctrl+V).');
         }
       } catch (error) {
-        vscode.window.showWarningMessage(`Could not paste test.png: ${error.message}`);
+        vscode.window.showWarningMessage(`Could not copy test.png to clipboard: ${error.message}`);
       }
     }
 
     const prompt = 'Analyze this issue from the image and fix it.';
 
-    if (nut && nut.keyboard) {
-      try {
-        await nut.keyboard.type(prompt + '\n');
-      } catch (err) {
-        try {
-          await vscode.commands.executeCommand('type', { text: prompt + '\n' });
-        } catch (err2) {
-          vscode.window.showInformationMessage('Could not auto-type prompt; please paste or type: ' + prompt);
-        }
-      }
-    } else {
-      try {
-        await vscode.commands.executeCommand('type', { text: prompt + '\n' });
-      } catch (err) {
-        vscode.window.showInformationMessage('Could not auto-type prompt; please paste or type: ' + prompt);
-      }
+    try {
+      await vscode.commands.executeCommand('type', { text: prompt + '\n' });
+    } catch (err) {
+      vscode.window.showInformationMessage('Could not auto-type prompt; please paste or type: ' + prompt);
     }
   });
 
