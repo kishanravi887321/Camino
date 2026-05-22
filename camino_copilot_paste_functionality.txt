@@ -1,3 +1,58 @@
+Camino Copilot Paste - Functionality Reference
+
+Purpose
+This file documents the current extension behavior so another project or agent can recreate it without reading or changing the original source files.
+
+What the extension does
+- Registers a command named testcopilot.start.
+- When the command runs, it tries to open Copilot Chat in VS Code.
+- If a file named test.png exists next to the extension entry file, it copies that image to the clipboard.
+- After Copilot Chat is open, it tries to paste the image into the chat input.
+- It then types a prompt: "Analyze this issue from the image and fix it."
+- If clipboard or paste actions fail, it shows a message so the user can paste manually.
+- Logging is written to an output channel named Camino Paste.
+
+Important manifest requirements
+- main should point to ./extension.js.
+- activationEvents should include onCommand:testcopilot.start.
+- contributes.commands should register testcopilot.start with a user-facing title.
+
+Implementation flow
+1. Activation
+- On activation, the extension creates an output channel for logs.
+- It registers the testcopilot.start command.
+
+2. Command execution
+- The command captures the start time.
+- It checks for test.png in the same folder as extension.js.
+- If the image exists, it starts copying the file to the clipboard.
+- In parallel, it opens Copilot Chat and waits briefly for the UI to be ready.
+- If the clipboard copy succeeds, it attempts paste using editor.action.clipboardPasteAction first.
+- If that fails, it tries the paste command.
+- If both paste attempts fail, it informs the user to paste manually.
+- Finally, it types the prompt into the active editor/chat input and submits it.
+
+3. Clipboard behavior by platform
+- Windows: uses PowerShell with System.Drawing and System.Windows.Forms to place the image on the clipboard.
+- macOS: uses osascript to read the file as a TIFF picture and set the clipboard.
+- Linux: tries wl-copy first, then xclip.
+- If no supported clipboard method exists, it returns an error.
+
+4. Copilot Chat opening behavior
+- The code tries github.copilot-chat.focus first.
+- If that fails, it tries workbench.action.chat.open.
+- If neither works, the function returns false.
+
+5. Error handling
+- Clipboard copy failures do not stop the whole command.
+- If the image cannot be copied, the user is warned but the prompt typing still continues.
+- If automatic prompt typing fails, the user is informed to paste or type the prompt manually.
+- The output channel collects debug messages for troubleshooting.
+
+Code reference
+Below is the full current implementation logic in plain text form.
+
+------------------------------------------------------------
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -111,7 +166,7 @@ function copyFileToClipboard(filePath) {
             return;
           }
 
-          reject(new Error('No clipboard image tool found: install wl-clipboard (wl-copy) or xclip')); 
+          reject(new Error('No clipboard image tool found: install wl-clipboard (wl-copy) or xclip'));
         });
       });
     });
@@ -206,3 +261,12 @@ module.exports = {
   activate,
   deactivate
 };
+------------------------------------------------------------
+
+Recreation notes for another project
+- Copy the logic into a new extension entry file if needed.
+- Keep the command id testcopilot.start consistent across package.json and the code.
+- If you want the image feature, place test.png beside the extension entry file.
+- If you only want the text prompt behavior, you can keep the same openCopilotChat and type flow and remove the clipboard section.
+- The code is designed to be self-contained and not depend on a native automation library.
+
